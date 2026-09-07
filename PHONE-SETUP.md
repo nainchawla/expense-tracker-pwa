@@ -88,7 +88,7 @@ This app deliberately has no account and no cloud database. That means:
 
 - The GitHub Pages site delivers the app files; it does **not** receive or store your financial entries.
 - Each phone/browser has its own separate data.
-- Reinstalling the app, clearing browser/site data, or switching phones can remove local records.
+- Normal app updates and GitHub Pages deployments replace the cached app files but retain IndexedDB data whenever the browser keeps site data. Reinstalling the app, clearing browser/site data, or switching phones can remove local records.
 - Use **History → Export JSON** regularly. Keep the downloaded backup somewhere safe, such as a private cloud drive or computer.
 - On a new phone, install the app first, then use **Settings → Import backup** to restore the JSON file.
 
@@ -107,7 +107,7 @@ When you change files in the project:
 2. GitHub Pages redeploys automatically, usually within a few minutes.
 3. Open the installed app while connected to the internet, then close and reopen it. The service worker will fetch the newer version.
 
-This project uses an offline cache. If you make future edits, change the cache version in `service-worker.js` (for example, `my-budget-v3` to `my-budget-v4`) before publishing; otherwise a phone may continue using old cached files.
+This project uses a versioned offline cache. When you change application files, update the cache version in `service-worker.js` before publishing so installed phones receive the new app shell. Cache changes do not erase IndexedDB, but cached files are never a backup for financial data: export JSON before major upgrades, reinstalls, device changes, or clearing site data.
 
 ## Can it work without GitHub Pages?
 
