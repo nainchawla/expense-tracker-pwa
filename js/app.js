@@ -112,7 +112,7 @@ const App = (() => {
         )
         .join(
           "",
-        )}</select></div><div class="summary"><div class="card"><div class="label">This cycle's budget</div><div class="number">${money(current.reduce((s, x) => s + x.allocated, 0))}</div></div><div class="card"><div class="label">Cycle spent</div><div class="number">${money(current.reduce((s, x) => s + x.spent, 0))}</div></div><div class="card"><div class="label">Spendable this cycle</div><div class="number">${money(remaining)}</div></div></div><h2>Category budgets</h2><p class="sub">Previous balances are held as a reserve and are used only after this cycle's budget is exhausted.</p><div class="categories">${current.map((c) => `<article class="card category" style="--color:${c.color}"><div class="category-head"><strong>${esc(c.name)}</strong><strong class="${c.cycleRemaining < 0 ? "negative" : ""}">${money(c.cycleRemaining)} left</strong></div><div class="label">This cycle budget ${money(c.allocated)} · spent ${money(c.spent)}</div><div class="label">Carry-over reserve ${money(c.reserveRemaining)}${c.reserveUsed ? ` · used ${money(c.reserveUsed)}` : ""}</div><div class="progress"><i style="width:${c.allocated ? Math.max(0, (c.spent / c.allocated) * 100) : 0}%"></i></div></article>`).join("")}</div><h2>All time</h2><div class="summary"><div class="card"><div class="label">Income</div><div class="number">${money(totalIncome)}</div></div><div class="card"><div class="label">Spent</div><div class="number">${money(totalSpent)}</div></div></div>`
+        )}</select></div><div class="summary"><div class="card"><div class="label">This cycle's budget</div><div class="number">${money(current.reduce((s, x) => s + x.allocated, 0))}</div></div><div class="card"><div class="label">Cycle spent</div><div class="number">${money(current.reduce((s, x) => s + x.spent, 0))}</div></div><div class="card"><div class="label">Spendable this cycle</div><div class="number">${money(remaining)}</div></div></div><h2>Category budgets</h2><p class="sub">Previous balances are held as a reserve and are used only after this cycle's budget is exhausted. A negative reserve is repaid from the next allocation before it becomes spendable.</p><div class="categories">${current.map((c) => `<article class="card category" style="--color:${c.color}"><div class="category-head"><strong>${esc(c.name)}</strong><strong class="${c.cycleRemaining < 0 ? "negative" : ""}">${money(c.cycleRemaining)} left</strong></div><div class="label">This cycle budget ${money(c.allocated)} · spent ${money(c.spent)}${c.debtRepaid ? ` · ${money(c.debtRepaid)} used to clear prior overage` : ""}</div><div class="label">Carry-over reserve ${money(c.reserveRemaining)}${c.reserveUsed ? ` · used ${money(c.reserveUsed)}` : ""}</div><div class="progress"><i style="width:${c.spendableBudget ? Math.max(0, (c.spent / c.spendableBudget) * 100) : 0}%"></i></div></article>`).join("")}</div><h2>All time</h2><div class="summary"><div class="card"><div class="label">Income</div><div class="number">${money(totalIncome)}</div></div><div class="card"><div class="label">Spent</div><div class="number">${money(totalSpent)}</div></div></div>`
     );
   }
   const categoryOptions = () =>
@@ -184,7 +184,12 @@ const App = (() => {
       amount = round2(f.get("amount"));
     if (!(amount > 0)) return toast("Enter an amount greater than zero.");
     const date = new Date(f.get("date")).toISOString(),
-      record = {
+      existingCycle = sortedCycles(state.cycles)
+        .filter((c) => new Date(c.startDate) <= new Date(date))
+        .at(-1);
+    if (existingCycle && !confirmReserveUse(existingCycle.id, f.get("categoryId"), amount))
+      return;
+    const record = {
         id: id(),
         description: f.get("description").trim(),
         amount,
@@ -200,6 +205,27 @@ const App = (() => {
     state.view = "dashboard";
     toast("Expense saved.");
     render();
+  }
+  function confirmReserveUse(cycleId, categoryId, amount) {
+    const category = calculateBalances(
+      state.settings,
+      state.incomes,
+      state.expenses,
+      state.cycles,
+    )[cycleId]?.find((c) => c.id === categoryId);
+    if (!category || amount <= category.cycleRemaining) return true;
+    const reserveNeeded = round2(amount - category.cycleRemaining);
+    const reserveAfter = round2(category.reserveRemaining - reserveNeeded);
+    const categoryName = category.name;
+    const message = [
+      `This ${categoryName} expense exceeds this cycle's remaining budget by ${money(reserveNeeded)}.`,
+      `Carry-over reserve: ${money(category.reserveRemaining)} → ${money(reserveAfter)} after this expense.`,
+      reserveAfter < 0
+        ? `This will leave a ${money(Math.abs(reserveAfter))} overage. The next allocation for ${categoryName} will repay that overage before new money is available to spend.`
+        : "The excess will be taken from your carry-over reserve.",
+      "Save this expense?",
+    ].join("\n\n");
+    return confirm(message);
   }
   async function saveIncome(e) {
     e.preventDefault();

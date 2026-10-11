@@ -70,8 +70,9 @@ const splitIncome = (
 };
 const sortedCycles = (cycles) =>
   [...cycles].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-/* New income is the visible, spendable budget for its own cycle.  Older money
-   remains a reserve and is touched only after that cycle's allocation is spent. */
+/* New income is the visible, spendable budget for its own cycle. Older money
+   remains a reserve and is touched only after that cycle's allocation is spent.
+   A negative carried balance is an overage: the next allocation repays it first. */
 const calculateBalances = (settings, incomes, expenses, cycles) => {
   let carried = Object.fromEntries(settings.categories.map((c) => [c.id, 0]));
   const out = {};
@@ -115,13 +116,17 @@ const calculateBalances = (settings, incomes, expenses, cycles) => {
       const opening = carried[c.id] || 0,
         cycleBudget = allocated[c.id] || 0,
         cycleSpent = spent[c.id] || 0,
-        cycleRemaining = round2(Math.max(0, cycleBudget - cycleSpent)),
-        reserveUsed = round2(Math.max(0, cycleSpent - cycleBudget)),
-        reserveRemaining = round2(opening - reserveUsed);
+        debtRepaid = round2(Math.min(cycleBudget, Math.max(0, -opening))),
+        spendableBudget = round2(cycleBudget - debtRepaid),
+        cycleRemaining = round2(Math.max(0, spendableBudget - cycleSpent)),
+        reserveUsed = round2(Math.max(0, cycleSpent - spendableBudget)),
+        reserveRemaining = round2(opening + debtRepaid - reserveUsed);
       return {
         ...c,
         opening,
         allocated: cycleBudget,
+        debtRepaid,
+        spendableBudget,
         spent: cycleSpent,
         cycleRemaining,
         reserveUsed,
